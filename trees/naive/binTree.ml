@@ -10,14 +10,9 @@ let h2 = Node(4,Node(3,Leaf,Leaf),h1)
 let rec insertNode (tr : 'a binTree) (el : 'a) : 'a binTree =
     match tr with
         Leaf -> Node(el,Leaf,Leaf)
-        | Node(e,g,d) -> 
+        | Node(e,g,d) as n -> if el = e then n
                 if el > e then Node(e,g,insertNode d el)
                 else Node(e,insertNode g el,d)
-
-
-(** cas 1 : supprimer un noeud sans enfants*)
-(** cas 2 : supprimer un noeud avec un enfant *)
-(** cas 3 : supprimer un noeud avec deux enfants *)
 
 let ex = Node(7,Node(6,Leaf,Leaf),Node(12,Node(10,Node(9,Leaf,Leaf),Node(11,Leaf,Leaf)),Node(14,Leaf,Leaf)))
 
@@ -28,6 +23,11 @@ let rec minGreaterPredecessorHelper (tr : 'a binTree) : 'a =
         Leaf -> raise Not_found
         | Node(e,Leaf,_) -> e
         | Node(e,g,d) -> minGreaterPredecessorHelper g
+
+
+(** cas 1 : supprimer un noeud sans enfants*)
+(** cas 2 : supprimer un noeud avec un enfant *)
+(** cas 3 : supprimer un noeud avec deux enfants *)
 
 let rec deleteNodeTrivial (tr: 'a binTree) (el : 'a) : 'a binTree = 
     match tr with
