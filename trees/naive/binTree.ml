@@ -17,7 +17,7 @@ let rec insertNode (tr : 'a binTree) (el : 'a) : 'a binTree =
 
 (** cas 1 : supprimer un noeud sans enfants*)
 (** cas 2 : supprimer un noeud avec un enfant *)
-(** TODO cas 3 : supprimer un noeud avec deux enfants *)
+(** cas 3 : supprimer un noeud avec deux enfants *)
 
 let ex = Node(7,Node(6,Leaf,Leaf),Node(12,Node(10,Node(9,Leaf,Leaf),Node(11,Leaf,Leaf)),Node(14,Leaf,Leaf)))
 
@@ -42,6 +42,9 @@ let rec deleteNodeTrivial (tr: 'a binTree) (el : 'a) : 'a binTree =
         | Node (e,Leaf,d) -> if el = e then d
                              else if el > e then Node(e,Leaf,deleteNodeTrivial d el)
                                   else  Node(e,deleteNodeTrivial Leaf el,d)
+        (** cas 3 on prend le sous arbre droit, et on cherche son plus petit element, ça remplace
+            le noeud supprimé, et on oublie pas de supprimer ce plus petit element de l'arbre pour pas
+            avoir de doublon *)
         | Node (e,g,d) -> if el = e then let minPred = minGreaterPredecessorHelper d in
                           Node(minPred,g, deleteNodeTrivial d minPred)
                           else if el > e then Node(e,g,deleteNodeTrivial d el)
