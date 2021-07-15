@@ -9,6 +9,10 @@ let feuille = Leaf
 let h1 = Node(6,Leaf,Leaf)
 let h2 = Node(4,Node(3,Leaf,Leaf),h1)
 
+let rec lookup x = function
+  | Leaf -> false
+  | Node(v,g,d) -> v = x || if x > v then lookup x d else lookup x g
+
 let rec insertNode (tr : 'a binTree) (el : 'a) : 'a binTree =
     match tr with
         Leaf -> Node(el,Leaf,Leaf)
@@ -31,24 +35,24 @@ let rec minGreaterPredecessorHelper (tr : 'a binTree) : 'a =
 (** cas 2 : supprimer un noeud avec un enfant *)
 (** cas 3 : supprimer un noeud avec deux enfants *)
 
-let rec deleteNodeTrivial (tr: 'a binTree) (el : 'a) : 'a binTree = 
+let rec deleteNode (tr: 'a binTree) (el : 'a) : 'a binTree = 
     match tr with
         Leaf -> raise Not_found
         (** cas 1 *)
-        | Node(e,Leaf,Leaf) -> if el = e then Leaf else deleteNodeTrivial Leaf el
+        | Node(e,Leaf,Leaf) -> if el = e then Leaf else deleteNode Leaf el
         (** cas 2 *)
         | Node (e,g,Leaf) -> if el = e then g
-                             else if el > e then Node(e,g,deleteNodeTrivial Leaf el)
-                                  else  Node(e,deleteNodeTrivial g el,Leaf)
+                             else if el > e then Node(e,g,deleteNode Leaf el)
+                                  else  Node(e,deleteNode g el,Leaf)
         (** cas 2 *)
         | Node (e,Leaf,d) -> if el = e then d
-                             else if el > e then Node(e,Leaf,deleteNodeTrivial d el)
-                                  else  Node(e,deleteNodeTrivial Leaf el,d)
+                             else if el > e then Node(e,Leaf,deleteNode d el)
+                                  else  Node(e,deleteNode Leaf el,d)
         (** cas 3 on prend le sous arbre droit, et on cherche son plus petit element, ça remplace
             le noeud supprimé, et on oublie pas de supprimer ce plus petit element de l'arbre pour pas
             avoir de doublon *)
         | Node (e,g,d) -> if el = e then let minPred = minGreaterPredecessorHelper d in
-                          Node(minPred,g, deleteNodeTrivial d minPred)
-                          else if el > e then Node(e,g,deleteNodeTrivial d el)
-                               else  Node(e,deleteNodeTrivial g el,d)
+                          Node(minPred,g, deleteNode d minPred)
+                          else if el > e then Node(e,g,deleteNode d el)
+                               else  Node(e,deleteNode g el,d)
 
