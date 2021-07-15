@@ -1,3 +1,5 @@
+(** Arbre binaire de recherche *)
+
 type 'a binTree = 
     | Leaf
     | Node of 'a * 'a binTree * 'a binTree
