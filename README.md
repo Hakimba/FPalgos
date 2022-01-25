@@ -1,2 +1,2 @@
 # FPalgos
-Des structures de données et algos implémentées dans un langage fonctionnel, tantot naivement tantot "idiomatiquement".
+Des structures de données fonctionnelles et algorithmes écrits en OCaml
