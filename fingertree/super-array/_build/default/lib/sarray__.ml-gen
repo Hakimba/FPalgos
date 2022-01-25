@@ -1,0 +1,2 @@
+(** @canonical Sarray.Fingertree *)
+module Fingertree = Sarray__Fingertree
