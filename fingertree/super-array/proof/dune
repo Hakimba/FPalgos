@@ -1,4 +1,4 @@
 (executable
  (name sarray_proofs)
- (libraries sarray stdio easier_proof)
+ (libraries finger stdio easier_proof)
 )

@@ -1,182 +1,152 @@
-
-(**
-  require these laws :
-    mappend empty x = x
-    mappend x empty = x
-    mappend x (mappend y z ) = mappend (mappend x y) z
-*)
-module type MONOID = sig
-  type t
-  val mempty : t
-  val mappend : t -> t -> t
+module type MONOID = sig 
+  type t 
+  val neutral : t 
+  val (<|>) : t -> t -> t
 end
 
-
-module IntMonoid : MONOID = struct
-  type t = int
-  let mempty = 0
-  let mappend = (+)
+module type MEASURABLE = sig
+  type t 
+  module Monoid : MONOID
+  val measure : t -> Monoid.t
 end
 
-module type FINGERTREE_SEQ = functor (Monoid : MONOID) ->
-sig
-  type 'a finger_tree
-  type 'a view
-
-  val empty : 'a finger_tree
-  val prepend : 'a -> 'a finger_tree -> 'a finger_tree
-  val append : 'a -> 'a finger_tree -> 'a finger_tree
-  val viewl : 'a finger_tree -> 'a view
-  val viewr : 'a finger_tree -> 'a view
-  val concat : 'a finger_tree -> 'a finger_tree -> 'a finger_tree
-end
-
-module Ft_seq (M : MONOID) = struct
-  exception Invalid_n of string
-  exception Impossible_state
-
-  type 'a node = 
-    | Branch2 of 'a * 'a
-    | Branch3 of 'a * 'a * 'a
-
-  (**Represent the prefix/suffix part of the spine of a finger tree*)
-  type 'a affix =
+module type DIGIT = functor (M : MEASURABLE) -> sig
+  type 'a digit =
     | One of 'a
     | Two of 'a * 'a
     | Three of 'a * 'a * 'a
     | Four of 'a * 'a * 'a * 'a
+  type t = M.t digit
+  val listToDigit : M.t list -> t
+  val lastInit : t -> M.t * t 
 
-  type 'a finger_tree =
-    | Empty
-    | Single of 'a
-    | Deep of {
-      prefix : 'a affix;
-      deeper : 'a node finger_tree;
-      suffix : 'a affix
-    }
+  include MEASURABLE with type t := t and module Monoid = M.Monoid
+end
 
-  type 'a view =
-    | Nil
-    | View of 'a * 'a finger_tree
+module Digit (M : MEASURABLE) = struct
+  exception Invalid_n of string
+  exception Impossible_state
+  type 'a digit =
+    | One of 'a
+    | Two of 'a * 'a
+    | Three of 'a * 'a * 'a
+    | Four of 'a * 'a * 'a * 'a
+  type t = M.t digit
 
-  let empty = Empty
+  module Monoid = M.Monoid
 
-  let affixPrepend el affix = match affix with
-    | One(a) -> Two(el,a)
-    | Two(a,b) -> Three(el,a,b)
-    | Three(a,b,c) -> Four(el,a,b,c)
-    | _ -> raise (Invalid_n "must contain a number of element between 1 and 4 included")
-
-  let affixAppend el affix = match affix with
-    | One(a) -> Two(a,el)
-    | Two(a,b) -> Three(a,b,el)
-    | Three(a,b,c) -> Four(a,b,c,el)
-    | _ -> raise (Invalid_n "must contain a number of element between 1 and 4 included")
-
-  let affixToList = function
-    | One(x) -> [x] 
-    | Two(x,y) -> [x;y]
-    | Three(x,y,z) -> [x;y;z]
-    | Four(x,y,z,w) -> [x;y;z;w]
-
-  let listToAffix = function
+  let fold_map f =
+    let open Monoid in
+    function
+    | One a -> f a
+    | Two (a, b) -> f a <|> f b
+    | Three (a, b, c) -> f a <|> f b <|> f c
+    | Four (a, b, c, d) -> f a <|> f b <|> f c <|> f d
+  
+  let listToDigit = function
     | [x]  -> One(x)
     | [x;y] -> Two(x,y)
     | [x;y;z] -> Three(x,y,z) 
     | [x;y;z;w] -> Four(x,y,z,w)
     | _ -> raise (Invalid_n "must have 1..4 elements")
 
-  let nodeToList = function
-    | Branch2(x,y) -> [x;y]
-    | Branch3(x,y,z) -> [x;y;z]
+  let lastInit = function
+      | One(_) -> raise Impossible_state
+      | Two(v,u) -> (u,listToDigit [v])
+      | Three(v,u,o) -> (o,listToDigit [v;u])
+      | Four(v,u,o,p) -> (p,listToDigit [v;u;o])
 
-  let listToNode = function
-    | [x;y] -> Branch2(x,y)
-    | [x;y;z] -> Branch3(x,y,z)
-    | _ -> raise (Invalid_n "node must contain two or three elements")
-
-  let rec nodes = function
-    | [] -> raise (Invalid_argument "not enough elements for nodes")
-    | [_] -> raise (Invalid_argument "not enough elements for nodes")
-    | [x;y] -> [Branch2(x,y)]
-    | [x;y;z] -> [Branch3(x,y,z)]
-    | x::y::rest -> Branch2(x,y)::(nodes rest)
-
-  let rec prepend : 'a. 'a -> 'a finger_tree -> 'a finger_tree =
-    fun x ft -> match ft with
-      | Empty -> Single x
-      | Single(a) -> Deep{prefix=One(x);deeper=Empty;suffix=One(a)}
-      | Deep {prefix=Four(a,b,c,d);deeper=deeper;suffix=suffix} ->
-          let node = Branch3(b,c,d) in
-          Deep{prefix=Two(x,a);deeper=(prepend node deeper);suffix=suffix}
-      | Deep{prefix=prefix;deeper=deeper;suffix=suffix} -> Deep{prefix=affixPrepend x prefix;deeper;suffix}
-
-  let rec append : 'a. 'a -> 'a finger_tree -> 'a finger_tree =
-    fun x ft -> match ft with
-      | Empty -> Single x
-      | Single(a) -> Deep{prefix=One(a);deeper=Empty;suffix=One(x)}
-      | Deep {prefix=prefix;deeper=deeper;suffix=Four(a,b,c,d)} ->
-          let node = Branch3(a,b,c) in
-          Deep{prefix=prefix;deeper=(append node deeper);suffix=Two(d,x)}
-      | Deep{prefix=prefix;deeper=deeper;suffix=suffix} -> Deep{prefix;deeper;suffix=affixAppend x suffix}
-
-  let rec viewl : 'a. 'a finger_tree -> 'a view = function
-    | Empty -> Nil
-    | Single(a) -> View(a,Empty)
-    | Deep{prefix=One(x);deeper;suffix} -> 
-        let rest = match viewl deeper with
-          | View(node,rest') -> Deep{prefix=(listToAffix(nodeToList node));deeper=rest';suffix=suffix}
-          | Nil -> match suffix with
-              | One(v) -> Single(v)
-              | Two(v,u) -> Deep{prefix=One(v);deeper=Empty;suffix=One(u)}
-              | Three(v,u,o) -> Deep{prefix=Two(v,u);deeper=Empty;suffix=One(o)}
-              | Four(v,u,o,p) -> Deep{prefix=Three(v,u,o);deeper=Empty;suffix=One(p)}
-    in View(x,rest) 
-    | Deep{prefix=prefix;deeper=deeper;suffix=suffix} ->
-        let (head,rest) = 
-          match affixToList prefix with
-            | [] -> raise Impossible_state
-            | head::rest -> (head,rest)
-        in
-        View(head,Deep{prefix=listToAffix rest;deeper;suffix})
-
-  let rec viewr : 'a. 'a finger_tree -> 'a view = function
-    | Empty -> Nil
-    | Single(a) -> View(a,Empty)
-    | Deep{prefix=prefix;deeper;suffix=One(x)} ->
-        let rest = match viewr deeper with
-          | View(node,rest') -> Deep{prefix=prefix;deeper=rest';suffix=(listToAffix(nodeToList(node)))}
-          | Nil -> match prefix with
-            | One(v) -> Single(v)
-            | Two(v,u) -> Deep{prefix=One(v);deeper=Empty;suffix=One(u)}
-            | Three(v,u,o) -> Deep{prefix=Two(v,u);deeper=Empty;suffix=One(o)}
-            | Four(v,u,o,p) -> Deep{prefix=Three(v,u,o);deeper=Empty;suffix=One(p)}
-        in View(x,rest) 
-    | Deep{prefix=prefix;deeper=deeper;suffix=suffix} ->
-        let (head,rest) = 
-          match suffix with
-          | One(_) -> raise Impossible_state
-          | Two(v,u) -> (u,listToAffix [v])
-          | Three(v,u,o) -> (o,listToAffix [v;u])
-          | Four(v,u,o,p) -> (p,listToAffix [v;u;o])
-        in
-        View(head,Deep{prefix=prefix;deeper;suffix=rest})
-
-  let rec concatWithMiddle : 'a. 'a finger_tree -> 'a list -> 'a finger_tree -> 'a finger_tree =
-    fun ftl middle ftr ->
-    match ftl,middle,ftr with
-    | Empty, [], right -> right
-    | Empty, (x::xs), right -> prepend x (concatWithMiddle Empty xs right)
-    | Single(a), xs, right -> prepend a (concatWithMiddle Empty xs right)
-    | left, [], Empty -> left
-    | left, (x::xs), Empty -> append x (concatWithMiddle left xs Empty)
-    | left, xs, Single(a) -> append a (concatWithMiddle left xs Empty)
-    | Deep{prefix=pl;deeper=dl;suffix=sl},mid,Deep{prefix=pr;deeper=dr;suffix=sr} ->
-        let mid' = nodes ( (affixToList sl) @ mid @ (affixToList pr)) in
-        let deeper' = concatWithMiddle (dl) mid' (dr) in
-        Deep{prefix=pl;deeper=deeper';suffix=sr}
-
-  let concat fa fb = concatWithMiddle fa [] fb
-
+  let measure = fold_map M.measure
 end
 
+module type NODE = functor (M : MEASURABLE) -> sig
+type 'a node =
+  | Node2 of (M.Monoid.t * 'a * 'a)
+  | Node3 of (M.Monoid.t * 'a * 'a * 'a)
+type t = M.t node
+val node2 : M.t -> M.t -> t
+val node3 : M.t -> M.t -> M.t -> t
+val measure : t -> M.Monoid.t
+val nodeToList : t -> M.t list
+
+include MEASURABLE with type t := t and module Monoid = M.Monoid
+end
+
+module Node (M : MEASURABLE) = struct
+  type 'a node =
+    | Node2 of (M.Monoid.t * 'a * 'a)
+    | Node3 of (M.Monoid.t * 'a * 'a * 'a)
+  type t = M.t node
+  module Monoid = M.Monoid
+
+  let node2 a b =
+    let v = Monoid.(M.measure a <|> M.measure b) in
+    Node2 (v, a, b)
+
+  let node3 a b c =
+    let v = Monoid.(M.measure a <|> M.measure b <|> M.measure c) in
+    Node3 (v, a, b, c)
+
+  let measure = function
+    | Node2 (x, _, _) | Node3 (x, _, _, _) -> x
+
+  let nodeToList =
+    function
+    | Node2(_,x,y) -> [x;y]
+    | Node3(_,x,y,z) -> [x;y;z]
+end
+
+module Finger_tree (M : MEASURABLE) : sig
+  type t
+
+  val empty : t
+  val singleton : M.t -> t
+end = struct
+  module D = Digit (M)
+  module N = Node (M)
+
+  type 'a f =
+    | Empty
+    | Single of 'a
+    | Deep of M.Monoid.t * D.t * N.t f * D.t
+
+  type t = M.t f
+  type 'a view = Nil | View of 'a * 'a f
+
+  let empty = Empty
+  let singleton x = Single x
+
+  let measure_node = function
+    | Empty -> M.Monoid.neutral
+    | Single x -> N.measure x
+    | Deep (x, _, _, _) -> x
+  
+  let digitToTree digit =
+    let open D in
+    match digit with
+    |One a -> Single a
+    |Two(a,b) -> Deep(measure digit,One(a),Empty,One(b))
+    |Three(a,b,c) -> Deep(measure digit,One(a),Empty,Two(b,c))
+    |Four(a,b,c,d) -> Deep(measure digit,Two(a,b),Empty,Two(c,d))
+
+  (** here the problem, i dont know how to write a polymorphic recursion with my actual types*)
+  let rec viewr : 'a. 'a f -> 'a view = function
+    | Empty -> Nil
+    | Single x -> View(x,Empty)
+    | Deep(_,prefix,deeper,One(x)) -> 
+      let open M.Monoid in
+      let dp = (match viewr deeper with
+      |View(node,rest') -> 
+        let suff = D.listToDigit (N.nodeToList node) in
+        let annot = D.measure prefix <|> measure_node deeper <|> D.measure suff in
+        Deep(annot,prefix,rest',suff)
+      |Nil -> digitToTree prefix)
+      in View(x,dp)
+    | _ -> raise (Invalid_argument "e") (*Deep{annotation;prefix;deeper;suffix} ->
+      let (head,rs) = Digit.lastInit suffix in
+      annot = measure prefix <|> measure deeper <|> measure rs in
+      View(head,Deep{annotation=annot;prefix=prefix;deeper=deeper;suffix=rs})*)
+
+        (*let deep prefix deeper suffix = match prefix,suffix with
+            |[],[] -> *)
+end
